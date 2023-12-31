@@ -14,21 +14,16 @@ import * as z from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
-import {
-  createUserWithEmailAndPassword,
-  getAuth,
-  signInWithEmailAndPassword,
-  signInWithRedirect,
-  GoogleAuthProvider,
-  getRedirectResult,
-} from 'firebase/auth';
+import { getAuth, AuthError, AuthErrorCodes } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 
-import firebase_app from '../../firebase/firebaseConfig';
+import { firebase_app } from '../../firebase/firebaseConfig';
 import { Key, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import { error } from 'console';
 
 const auth = getAuth(firebase_app);
 const time = new Date();
@@ -56,8 +51,50 @@ const signUpSchema = z.object({
   }),
 });
 
+const handleLoginError = (error: AuthError) => {
+  switch (error.code) {
+    case AuthErrorCodes.INVALID_PASSWORD:
+      alert('Invalid password, please try again with a different password.');
+      break;
+    case AuthErrorCodes.USER_DELETED:
+      alert(
+        'No user found with that email. Please check your email and try again or sign up.'
+      );
+      break;
+    case AuthErrorCodes.INVALID_LOGIN_CREDENTIALS:
+      alert(
+        'Invalid credentials. Please check your email and password and try again.'
+      );
+      break;
+    default:
+      alert(error.message);
+  }
+};
+
+const handleSigninError = (error: AuthError) => {
+  switch (error.code) {
+    case AuthErrorCodes.INVALID_PASSWORD:
+      alert('Invalid password, please try again with a different password.');
+      break;
+    case AuthErrorCodes.USER_DELETED:
+      alert(
+        'No user found with that email. Please check your email and try again or sign up.'
+      );
+      break;
+    case AuthErrorCodes.INVALID_LOGIN_CREDENTIALS:
+      alert(
+        'Invalid credentials. Please check your email and password and try again.'
+      );
+      break;
+    default:
+      alert(error.message);
+  }
+};
+
 const SignInForm = (key: Key, showSignUp: Boolean, toggleScreen: Function) => {
   const router = useRouter();
+
+  const { login } = useAuth();
 
   const inForm = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
@@ -68,20 +105,13 @@ const SignInForm = (key: Key, showSignUp: Boolean, toggleScreen: Function) => {
   });
 
   async function onSubmit(values: z.infer<typeof signInSchema>) {
-    signInWithEmailAndPassword(auth, values.email, values.password)
-      .then((userCredential) => {
-        const user = userCredential.user;
-
+    login(values.email, values.password)
+      .then(() => {
         router.push('/dashboard');
       })
       .catch((error) => {
-        const errorCode = error.code;
-        const errorMessage = error.message;
-
-        console.log(errorCode, errorMessage);
+        handleLoginError(error);
       });
-
-    console.log(values);
   }
 
   return (
@@ -157,6 +187,8 @@ const SignInForm = (key: Key, showSignUp: Boolean, toggleScreen: Function) => {
 const SignUpForm = (key: Key, showSignUp: Boolean, toggleScreen: Function) => {
   const router = useRouter();
 
+  const { signup } = useAuth();
+
   const upForm = useForm<z.infer<typeof signUpSchema>>({
     resolver: zodResolver(signUpSchema),
     defaultValues: {
@@ -167,20 +199,13 @@ const SignUpForm = (key: Key, showSignUp: Boolean, toggleScreen: Function) => {
   });
 
   async function onSubmit(values: z.infer<typeof signUpSchema>) {
-    createUserWithEmailAndPassword(auth, values.email, values.password)
-      .then((userCredential) => {
-        const user = userCredential.user;
-
+    signup(values.email, values.password)
+      .then(() => {
         router.push('/dashboard');
       })
       .catch((error) => {
-        const errorCode = error.code;
-        const errorMessage = error.message;
-
-        console.log(errorCode, errorMessage);
+        handleSigninError(error);
       });
-
-    console.log(values);
   }
 
   return (
@@ -277,17 +302,15 @@ export default function SignIn() {
   const [showSignUp, setShowSignUp] = useState(false);
 
   const router = useRouter();
+  const { continueWithGoogle } = useAuth();
 
   const handleContinueWithGoogle = async () => {
-    signInWithRedirect(auth, new GoogleAuthProvider());
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          router.push('/dashboard');
-        }
+    continueWithGoogle()
+      .then(() => {
+        router.push('/dashboard');
       })
       .catch((error) => {
-        console.log(error);
+        alert(error.message);
       });
   };
 
@@ -309,7 +332,12 @@ export default function SignIn() {
       >
         <h1 className='font-sans text-7xl font-semibold'>EDUT</h1>
 
-        <Button asChild variant='outline' onClick={handleContinueWithGoogle} className='cursor-pointer'>
+        <Button
+          asChild
+          variant='outline'
+          onClick={handleContinueWithGoogle}
+          className='cursor-pointer'
+        >
           <div className='flex items-center gap-3'>
             <svg
               xmlns='http://www.w3.org/2000/svg'
